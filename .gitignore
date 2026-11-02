@@ -1,0 +1,40 @@
+# documents and data
+*.xlsx
+*.xls
+*.xlsm
+*.docx
+*.doc
+*.pdf
+*.csv
+*.p7m
+data/
+dati/
+backup/
+
+# configuration and secrets
+.env
+.env.*
+config.json
+*.key
+*.pem
+*.pfx
+*.p12
+*.token
+token.json
+tokens.json
+credentials.*
+passwords.*
+
+# build output and dependencies
+node_modules/
+dist/
+out/
+build/
+target/
+*.log
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
