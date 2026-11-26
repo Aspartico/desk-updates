@@ -96,7 +96,7 @@ function scriviCsv(storico) {
 }
 
 function report() {
-  // Unisce tutti i PC che scrivono nella stessa cartella (es. Dropbox).
+  // Unisce tutti i PC che scrivono nella stessa cartella (es. MEGA).
   const tot = {};
   let file = [];
   try { file = fs.readdirSync(DATI_DIR).filter((n) => /^registro-.+\.json$/.test(n)); } catch {}

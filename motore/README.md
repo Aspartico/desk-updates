@@ -16,9 +16,10 @@ Serve a confrontare i compiti tra loro anche con l'abbonamento, dove conta il li
 ## Installazione su ogni PC
 
 1. Serve Node.js (`winget install OpenJS.NodeJS.LTS` se manca).
-2. Facoltativo ma consigliato: per unire i dati dei tre PC, imposta una cartella condivisa gratuita, ad esempio
-   `setx MOTORE_DIR "%USERPROFILE%\Dropbox\claude-motore"`, poi chiudi e riapri il terminale.
-3. Doppio clic su `motore\installa.cmd` (oppure `node motore/installa.mjs`).
+2. Doppio clic su `motore\installa.cmd` (oppure `node motore/installa.mjs`).
+
+L'installer cerca da solo la cartella MEGA (es. `D:\MEGA\AI`) e salva i dati in `claude-motore` lì dentro, così il report unisce i tre PC.
+Se MEGA è altrove: `node motore/installa.mjs --dati "X:\percorso\MEGA\claude-motore"`.
 
 Si può rilanciare quante volte si vuole: non duplica gli hook. Fa una copia di `settings.json` in `settings.json.bak-motore`.
 Per togliere tutto: `node motore/installa.mjs --rimuovi`.

@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CLAUDE_DIR, DATI_DIR } from './comune.mjs';
+import { CLAUDE_DIR, CONFIG, cercaMega, leggiJson, scriviJson } from './comune.mjs';
 
 const qui = path.dirname(fileURLToPath(import.meta.url));
 const dest = path.join(CLAUDE_DIR, 'motore', 'bin');
@@ -25,7 +25,7 @@ for (const evento of ['SessionStart', 'SessionEnd']) {
 
 if (process.argv.includes('--rimuovi')) {
   fs.writeFileSync(settings, JSON.stringify(conf, null, 2));
-  console.log('Hook rimossi. I dati restano in', DATI_DIR);
+  console.log('Hook rimossi. I dati restano dove erano.');
   process.exit(0);
 }
 
@@ -38,5 +38,11 @@ const hook = (command) => ({ hooks: [{ type: 'command', command, timeout: 60 }] 
 (conf.hooks.SessionEnd ??= []).push(hook(cmd('registro.mjs')));
 fs.writeFileSync(settings, JSON.stringify(conf, null, 2));
 
+// Cartella dati: --dati <cartella>, altrimenti MEGA se c'e', altrimenti locale.
+const i = process.argv.indexOf('--dati');
+const scelta = i > 0 ? process.argv[i + 1] : leggiJson(CONFIG, {}).dati || (cercaMega() && path.join(cercaMega(), 'claude-motore'));
+if (scelta) { fs.mkdirSync(scelta, { recursive: true }); scriviJson(CONFIG, { dati: scelta }); }
+
 console.log('Installato in', dest);
-console.log('Dati in', DATI_DIR, process.env.MOTORE_DIR ? '' : '(imposta MOTORE_DIR per una cartella Dropbox condivisa tra i PC)');
+console.log('Dati in', process.env.MOTORE_DIR || scelta || path.join(CLAUDE_DIR, 'motore'),
+  scelta ? '(cartella sincronizzata: i PC vedono i dati uno dell\'altro)' : '(nessuna cartella MEGA trovata: per sceglierne una usa --dati "D:\\MEGA\\AI\\claude-motore")');
