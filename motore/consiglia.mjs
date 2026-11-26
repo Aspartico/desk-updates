@@ -108,7 +108,8 @@ export function componiMessaggio({ primo, scelta, attuale, fasce, conv, c, ollam
 
 async function principale() {
   let input = {};
-  try { input = JSON.parse(fs.readFileSync(0, 'utf8')); } catch { return; }
+  // PowerShell 5 aggiunge un BOM allo stdin: lo tolgo prima di leggere il JSON.
+  try { input = JSON.parse(fs.readFileSync(0, 'utf8').replace(/^\uFEFF/, '')); } catch { return; }
   const prompt = input.prompt || '';
   if (prompt.trim().length < 15 || prompt.trim().startsWith('/')) return; // "ok", "si'", comandi
   const catalogo = leggiJson(path.join(DATI_DIR, 'catalogo.json'), null);
