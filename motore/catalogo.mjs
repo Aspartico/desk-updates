@@ -14,6 +14,7 @@ import { CLAUDE_DIR, DATI_DIR, leggiJson, scriviJson } from './comune.mjs';
 const FILE = path.join(DATI_DIR, 'catalogo.json');
 const SETTE_GIORNI = 7 * 24 * 3600e3;
 const DOCS = 'https://docs.claude.com/en/docs/about-claude/models/overview';
+const PREZZI = 'https://docs.claude.com/en/docs/about-claude/pricing';
 const ID_MODELLO = /\bclaude-[a-z0-9]+(?:-[a-z0-9]+)*\b/g;
 
 export function analizzaHelp(testo) {
@@ -65,6 +66,48 @@ async function modelliDaDocs() {
   } catch { return []; }
 }
 
+// Legge la tabella prezzi pubblica: per ogni "Claude <Famiglia> <versione>" i primi due prezzi
+// trovati sono input e output ($ per milione di token). Nessun nome di famiglia scritto qui.
+export function analizzaPrezzi(html) {
+  const t = html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+  const parti = t.split(/Claude ([A-Z][a-z]+) (\d+(?:\.\d+)*)\b/);
+  const out = {};
+  for (let i = 1; i < parti.length; i += 3) {
+    const p = [...parti[i + 2].slice(0, 400).matchAll(/\$([\d.]+) \/ MTok/g)].map((m) => +m[1]);
+    if (p.length < 2) continue;
+    const id = `claude-${parti[i].toLowerCase()}-${parti[i + 1].replace(/\./g, '-')}`;
+    out[id] ??= { input: p[0], output: p[1] };
+  }
+  return out;
+}
+
+async function prezziDaDocs() {
+  try {
+    const r = await fetch(PREZZI, { signal: AbortSignal.timeout(15000) });
+    return analizzaPrezzi(await r.text());
+  } catch { return {}; }
+}
+
+// Fasce: per ogni famiglia la versione piu' recente che compare anche tra i modelli attuali,
+// ordinate dal prezzo piu' basso al piu' alto. Il prezzo fa da misura della capacita'.
+export function calcolaFasce(prezzi, idAttuali) {
+  const ver = (id) => id.split('-').slice(2).map(Number);
+  const piuNuovo = (a, b) => {
+    const x = ver(a), y = ver(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+    return false;
+  };
+  const perFamiglia = {};
+  for (const id of Object.keys(prezzi)) {
+    if (!idAttuali.includes(id)) continue;
+    const fam = id.split('-')[1];
+    if (!perFamiglia[fam] || piuNuovo(id, perFamiglia[fam])) perFamiglia[fam] = id;
+  }
+  return Object.entries(perFamiglia)
+    .map(([famiglia, id]) => ({ famiglia, id, ...prezzi[id] }))
+    .sort((a, b) => a.output - b.output || a.input - b.input);
+}
+
 function modelliDaLog() {
   const visti = new Set();
   const radice = path.join(CLAUDE_DIR, 'projects');
@@ -86,7 +129,7 @@ function modelliDaLog() {
 
 export async function aggiorna() {
   const help = analizzaHelp(eseguiHelp());
-  const [api, docs] = await Promise.all([modelliDaApi(), modelliDaDocs()]);
+  const [api, docs, prezzi] = await Promise.all([modelliDaApi(), modelliDaDocs(), prezziDaDocs()]);
   const log = modelliDaLog();
   const ids = new Set([...api.map((m) => m.id), ...docs, ...log]);
   const catalogo = {
@@ -97,6 +140,8 @@ export async function aggiorna() {
       id,
       fonti: [api.some((m) => m.id === id) && 'api', docs.includes(id) && 'docs', log.includes(id) && 'usato'].filter(Boolean),
     })),
+    prezzi,
+    fasce: calcolaFasce(prezzi, [...ids]),
     modalita: help.opzioni,
   };
   scriviJson(FILE, catalogo);
@@ -114,6 +159,8 @@ if (principale) {
     console.log(`Alias modelli: ${c.alias_modelli.join(', ') || '?'}`);
     console.log(`Modelli (${c.modelli.length}):`);
     for (const m of c.modelli) console.log(`  ${m.id}  [${m.fonti.join(', ')}]`);
+    console.log('Fasce (dalla piu economica):');
+    for (const f of c.fasce) console.log(`  ${f.id}  $${f.input}/$${f.output} per M token`);
     console.log(`Opzioni/modalita' trovate: ${c.modalita.length}  -> ${FILE}`);
   }
 }

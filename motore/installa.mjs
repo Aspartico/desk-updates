@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Installa il registro su questo PC: copia gli script e aggiunge due hook a ~/.claude/settings.json.
+// Installa su questo PC: copia gli script e aggiunge tre hook a ~/.claude/settings.json.
 //   - SessionStart: aggiorna il catalogo dei motori se ha piu' di 7 giorni (non stampa nulla, zero token).
 //   - SessionEnd:   salva i consumi della sessione appena chiusa.
+//   - UserPromptSubmit: consiglia motore ed effort (lo vedi solo tu, zero token).
 // Uso: node installa.mjs          (si puo' rilanciare: non duplica nulla)
 //      node installa.mjs --rimuovi
 import fs from 'node:fs';
@@ -18,7 +19,7 @@ const conf = fs.existsSync(settings) ? JSON.parse(fs.readFileSync(settings, 'utf
 if (fs.existsSync(settings)) fs.copyFileSync(settings, settings + '.bak-motore');
 
 conf.hooks ??= {};
-for (const evento of ['SessionStart', 'SessionEnd']) {
+for (const evento of ['SessionStart', 'SessionEnd', 'UserPromptSubmit']) {
   conf.hooks[evento] = (conf.hooks[evento] || []).filter((g) => !JSON.stringify(g).includes(MARCA));
   if (!conf.hooks[evento].length) delete conf.hooks[evento];
 }
@@ -30,12 +31,13 @@ if (process.argv.includes('--rimuovi')) {
 }
 
 fs.mkdirSync(dest, { recursive: true });
-for (const f of ['comune.mjs', 'catalogo.mjs', 'registro.mjs']) fs.copyFileSync(path.join(qui, f), path.join(dest, f));
+for (const f of ['comune.mjs', 'catalogo.mjs', 'registro.mjs', 'consiglia.mjs']) fs.copyFileSync(path.join(qui, f), path.join(dest, f));
 
 const cmd = (file, extra = '') => `node "${path.join(dest, file).split(path.sep).join('/')}"${extra}`;
 const hook = (command) => ({ hooks: [{ type: 'command', command, timeout: 60 }] });
 (conf.hooks.SessionStart ??= []).push(hook(cmd('catalogo.mjs', ' --se-vecchio')));
 (conf.hooks.SessionEnd ??= []).push(hook(cmd('registro.mjs')));
+(conf.hooks.UserPromptSubmit ??= []).push(hook(cmd('consiglia.mjs')));
 fs.writeFileSync(settings, JSON.stringify(conf, null, 2));
 
 // Cartella dati: --dati <cartella>, altrimenti MEGA se c'e', altrimenti locale.

@@ -32,3 +32,24 @@ node %USERPROFILE%\.claude\motore\bin\catalogo.mjs --mostra
 ```
 
 Il CSV si apre direttamente in Excel.
+
+## Fase 2: il consiglio del motore
+
+`consiglia.mjs` gira a ogni messaggio che invii (hook `UserPromptSubmit`) e ti mostra una riga di consiglio.
+La riga la vedi solo tu: **non entra nel contesto di Claude, quindi non costa token**.
+
+- **Primo messaggio** di una conversazione, anche di una vecchia ripresa con `claude --resume`: consiglia motore ed effort,
+  oppure conferma che quello in uso va bene.
+- **Messaggi successivi**: parla solo se serve.
+  - Se il compito è più difficile del motore in uso, consiglia di salire con `/model`. Il contesto resta e si evitano giri di correzioni.
+  - Consiglia di scendere solo se il salto è netto e la conversazione è ancora corta. Cambiando motore, la cache si rifà da zero
+    e con molto contesto il cambio costerebbe più di quanto fa risparmiare.
+  - Oltre i 150k token di contesto suggerisce `/compact` o una conversazione nuova.
+- Se il compito si può fare con l'IA locale (tradurre, riassumere, riformulare) e Ollama è acceso, te lo dice.
+
+Come decide: i motori disponibili e i loro prezzi li legge `catalogo.mjs` dalla documentazione ufficiale.
+Il prezzo serve da misura della capacità, quindi un motore nuovo entra da solo nella fascia giusta.
+Al primo messaggio la difficoltà la valuta l'IA locale (il modello Ollama più piccolo installato); se Ollama è spento, usa regole semplici.
+Nei messaggi successivi usa sempre le regole, per non rallentarti.
+
+Il consiglio funziona in Claude Code (terminale e app desktop). Le chat di claude.ai non eseguono hook.
