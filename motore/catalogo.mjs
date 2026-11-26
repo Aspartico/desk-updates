@@ -8,6 +8,7 @@
 // Uso: node catalogo.mjs [--se-vecchio] [--mostra]
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { CLAUDE_DIR, DATI_DIR, leggiJson, scriviJson } from './comune.mjs';
 
@@ -39,10 +40,37 @@ export function analizzaHelp(testo) {
   return { livelli_effort: livelli, alias_modelli: alias, opzioni };
 }
 
+// Il comando `claude` non sempre e' nel PATH (l'app desktop non ce lo mette): lo cerco anche
+// nei posti dove lo installano l'installer nativo, npm e l'app desktop.
+function candidatiClaude() {
+  const casa = os.homedir();
+  const out = [process.env.CLAUDE_BIN, 'claude'];
+  if (process.platform === 'win32') {
+    const app = process.env.APPDATA || path.join(casa, 'AppData', 'Roaming');
+    out.push(path.join(casa, '.local', 'bin', 'claude.exe'), path.join(app, 'npm', 'claude.cmd'));
+    // App desktop: %APPDATA%\Claude\claude-code\<versione>\claude.exe (prendo la versione piu' recente)
+    const dir = path.join(app, 'Claude', 'claude-code');
+    try {
+      for (const v of fs.readdirSync(dir).sort().reverse()) out.push(path.join(dir, v, 'claude.exe'));
+    } catch {}
+  } else {
+    out.push(path.join(casa, '.local', 'bin', 'claude'), path.join(casa, '.claude', 'local', 'claude'));
+  }
+  return out.filter(Boolean);
+}
+
 function eseguiHelp() {
-  try {
-    return execFileSync('claude', ['--help'], { encoding: 'utf8', timeout: 20000, shell: process.platform === 'win32' });
-  } catch { return ''; }
+  for (const bin of candidatiClaude()) {
+    try {
+      const opz = { encoding: 'utf8', timeout: 20000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
+      // I .cmd e il nome nudo su Windows passano da cmd /c (niente shell:true, deprecato in Node 24).
+      const testo = process.platform === 'win32' && !bin.endsWith('.exe')
+        ? execFileSync('cmd', ['/d', '/c', bin, '--help'], opz)
+        : execFileSync(bin, ['--help'], opz);
+      if (testo.includes('--model')) return testo;
+    } catch {}
+  }
+  return '';
 }
 
 async function modelliDaApi() {
@@ -129,20 +157,22 @@ function modelliDaLog() {
 
 export async function aggiorna() {
   const help = analizzaHelp(eseguiHelp());
+  const prima = leggiJson(FILE, {});
   const [api, docs, prezzi] = await Promise.all([modelliDaApi(), modelliDaDocs(), prezziDaDocs()]);
   const log = modelliDaLog();
   const ids = new Set([...api.map((m) => m.id), ...docs, ...log]);
   const catalogo = {
     aggiornato: new Date().toISOString(),
-    livelli_effort: help.livelli_effort,
-    alias_modelli: help.alias_modelli,
+    // Se `claude --help` non e' raggiungibile tengo quanto trovato la volta prima.
+    livelli_effort: help.livelli_effort.length ? help.livelli_effort : prima.livelli_effort || [],
+    alias_modelli: help.alias_modelli.length ? help.alias_modelli : prima.alias_modelli || [],
     modelli: [...ids].sort().map((id) => ({
       id,
       fonti: [api.some((m) => m.id === id) && 'api', docs.includes(id) && 'docs', log.includes(id) && 'usato'].filter(Boolean),
     })),
     prezzi,
     fasce: calcolaFasce(prezzi, [...ids]),
-    modalita: help.opzioni,
+    modalita: help.opzioni.length ? help.opzioni : prima.modalita || [],
   };
   scriviJson(FILE, catalogo);
   return catalogo;
