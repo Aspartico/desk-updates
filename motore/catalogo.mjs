@@ -6,14 +6,15 @@
 //   3. Pagina pubblica della documentazione sui modelli.
 //   4. Modelli visti davvero nei log delle sessioni.
 // Uso: node catalogo.mjs [--se-vecchio] [--mostra]
-import { execFileSync } from 'node:child_process';
+//   --se-vecchio: aggiorna (in background) solo se il catalogo ha piu' di un giorno o c'e' un motore nuovo.
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CLAUDE_DIR, DATI_DIR, leggiJson, scriviJson } from './comune.mjs';
+import { CLAUDE_DIR, DATI_DIR, HOST, leggiJson, scriviJson } from './comune.mjs';
 
 const FILE = path.join(DATI_DIR, 'catalogo.json');
-const SETTE_GIORNI = 7 * 24 * 3600e3;
+const UN_GIORNO = 24 * 3600e3; // costa zero token: solo una lettura della documentazione
 const DOCS = 'https://docs.claude.com/en/docs/about-claude/models/overview';
 const PREZZI = 'https://docs.claude.com/en/docs/about-claude/pricing';
 const ID_MODELLO = /\bclaude-[a-z0-9]+(?:-[a-z0-9]+)*\b/g;
@@ -48,11 +49,22 @@ function candidatiClaude() {
   if (process.platform === 'win32') {
     const app = process.env.APPDATA || path.join(casa, 'AppData', 'Roaming');
     out.push(path.join(casa, '.local', 'bin', 'claude.exe'), path.join(app, 'npm', 'claude.cmd'));
-    // App desktop: %APPDATA%\Claude\claude-code\<versione>\claude.exe (prendo la versione piu' recente)
-    const dir = path.join(app, 'Claude', 'claude-code');
-    try {
-      for (const v of fs.readdirSync(dir).sort().reverse()) out.push(path.join(dir, v, 'claude.exe'));
-    } catch {}
+    // App desktop: ...\claude-code\<versione>\[<hash>\]claude.exe, sotto %APPDATA%\Claude oppure
+    // %LOCALAPPDATA%\Claude-Data\<profilo>. La cartella cambia a ogni versione: le cerco tutte
+    // e provo prima la versione piu' alta.
+    const locale = process.env.LOCALAPPDATA || path.join(casa, 'AppData', 'Local');
+    const radici = [path.join(app, 'Claude', 'claude-code')];
+    try { for (const p of fs.readdirSync(path.join(locale, 'Claude-Data'))) radici.push(path.join(locale, 'Claude-Data', p, 'claude-code')); } catch {}
+    const trovati = [];
+    const ls = (d) => { try { return fs.readdirSync(d); } catch { return []; } };
+    for (const r of radici) for (const v of ls(r)) {
+      const dv = path.join(r, v);
+      for (const f of [path.join(dv, 'claude.exe'), ...ls(dv).map((h) => path.join(dv, h, 'claude.exe'))]) {
+        if (fs.existsSync(f)) trovati.push({ v: v.split('.').map(Number), f });
+      }
+    }
+    const cmp = (a, b) => { for (let i = 0; i < 4; i++) if ((a.v[i] || 0) !== (b.v[i] || 0)) return (b.v[i] || 0) - (a.v[i] || 0); return 0; };
+    out.push(...trovati.sort(cmp).map((t) => t.f));
   } else {
     out.push(path.join(casa, '.local', 'bin', 'claude'), path.join(casa, '.claude', 'local', 'claude'));
   }
@@ -182,7 +194,18 @@ const principale = process.argv[1] && import.meta.url.endsWith(path.basename(pro
 if (principale) {
   const args = process.argv.slice(2);
   const vecchio = leggiJson(FILE, null);
-  if (args.includes('--se-vecchio') && vecchio && Date.now() - Date.parse(vecchio.aggiornato) < SETTE_GIORNI) process.exit(0);
+  if (args.includes('--se-vecchio')) {
+    // Aggiorno se il catalogo ha piu' di un giorno, oppure se nei consumi compare un motore che
+    // il catalogo non conosce ancora (vuol dire che ne e' uscito uno nuovo).
+    const noti = new Set((vecchio?.modelli || []).map((m) => m.id));
+    const reg = leggiJson(path.join(DATI_DIR, `registro-${HOST}.json`), { sessioni: {} });
+    const nuovo = Object.values(reg.sessioni).some((s) => Object.keys(s.modelli || {}).some((id) => !noti.has(id)));
+    const fresco = vecchio && Date.now() - Date.parse(vecchio.aggiornato) < UN_GIORNO;
+    if (fresco && !nuovo) process.exit(0);
+    // Aggiorno in background: l'avvio di Claude Code non aspetta.
+    spawn(process.execPath, [process.argv[1]], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    process.exit(0);
+  }
   const c = await aggiorna();
   if (args.includes('--mostra')) {
     console.log(`Effort: ${c.livelli_effort.join(', ') || '?'}`);

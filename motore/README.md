@@ -7,7 +7,7 @@ Tutto gira in locale e **non consuma token di Claude**.
 
 | Script | Quando gira | Cosa produce |
 |---|---|---|
-| `catalogo.mjs` | All'avvio di Claude Code, al massimo una volta ogni 7 giorni | `catalogo.json`: livelli di effort, alias dei modelli, modelli esistenti, tutte le opzioni e modalità della CLI. Niente nomi scritti nel codice: legge `claude --help`, la documentazione pubblica, i propri log e (se c'è una chiave API) `/v1/models`. |
+| `catalogo.mjs` | All'avvio di Claude Code, in background: se il catalogo ha più di un giorno o se nei consumi compare un motore che non conosce | `catalogo.json`: livelli di effort, alias dei modelli, modelli esistenti, tutte le opzioni e modalità della CLI. Niente nomi scritti nel codice: legge `claude --help`, la documentazione pubblica, i propri log e (se c'è una chiave API) `/v1/models`. |
 | `registro.mjs` | Alla chiusura di ogni sessione | `registro-<PC>.csv` e `.json`: per ogni sessione e modello, chiamate, token di input, cache, output, ragionamento, subagent e un **peso** stimato del consumo. |
 
 Il **peso** usa il rapporto dei prezzi pubblici (input 1, scrittura cache 1,25, lettura cache 0,1, output 5).
