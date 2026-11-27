@@ -36,7 +36,7 @@ Il CSV si apre direttamente in Excel.
 ## Fase 2: il consiglio del motore
 
 `consiglia.mjs` gira a ogni messaggio che invii (hook `UserPromptSubmit`) e ti mostra una riga di consiglio.
-La riga la vedi solo tu: **non entra nel contesto di Claude, quindi non costa token**.
+Nel terminale la riga compare da sola, a costo zero. L'app desktop non mostra i messaggi degli hook, quindi lì è Claude a scriverla in cima alla risposta (circa 50 token, solo quando c'è un consiglio). Se usi solo il terminale, imposta `MOTORE_VISIBILE=terminale` e il costo torna zero.
 
 - **Primo messaggio** di una conversazione, anche di una vecchia ripresa con `claude --resume`: consiglia motore ed effort,
   oppure conferma che quello in uso va bene.
