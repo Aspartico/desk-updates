@@ -2,7 +2,11 @@
 // Hook UserPromptSubmit: consiglia motore ed effort, senza consumare token di Claude.
 // - Primo messaggio della conversazione: consiglio sempre.
 // - Messaggi successivi: avvisa solo se il motore in uso e' chiaramente sbagliato.
-// Il consiglio esce come "systemMessage": lo vedi tu, ma NON entra nel contesto di Claude.
+// Il consiglio esce in due modi:
+//  - "systemMessage": lo mostra il terminale (CLI), zero token;
+//  - "additionalContext": l'app desktop non mostra i systemMessage, quindi chiedo a Claude di
+//    riportare la riga in cima alla risposta. Costa circa 50 token, e solo quando c'e' un consiglio.
+// MOTORE_VISIBILE=terminale disattiva il secondo modo (per chi usa solo la CLI).
 // La classificazione la fa l'IA locale (Ollama) se c'e', altrimenti regole semplici.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -91,7 +95,7 @@ export function componiMessaggio({ primo, scelta, attuale, fasce, conv, c, ollam
     const giusto = attuale >= 0 && (attuale === scelta.fascia || scendereNonConviene);
     righe.push(giusto
       ? `Motore ok: ${nome(fasce[attuale])}. Effort consigliato: ${scelta.effort}.`
-      : `Motore consigliato: ${nome(scelta.motore)}, effort ${scelta.effort}. Scrivi /model ${nome(scelta.motore)} e /effort ${scelta.effort}.`);
+      : `Motore consigliato: ${nome(scelta.motore)}, effort ${scelta.effort}. Cambialo con /model ${nome(scelta.motore)} e /effort ${scelta.effort}, o dal selettore in basso.`);
     return righe.join(' ') + ` [${c.fonte}]`;
   }
   if (attuale < 0) return righe.join(' ');
@@ -134,7 +138,14 @@ async function principale() {
   const msg = componiMessaggio({ primo, scelta, attuale, fasce, conv, c, ollama });
   if (!msg || (!primo && msg === stato.ultimo)) return;
   scriviJson(fileStato, { ultimo: msg, quando: new Date().toISOString(), consigliato: scelta.motore.id, effort: scelta.effort, punteggio: c.punteggio, fonte: c.fonte });
-  process.stdout.write(JSON.stringify({ systemMessage: msg }));
+  const out = { systemMessage: msg };
+  if (process.env.MOTORE_VISIBILE !== 'terminale') {
+    out.hookSpecificOutput = {
+      hookEventName: 'UserPromptSubmit',
+      additionalContext: `[Selettore motore] Inizia la risposta con questa riga, identica, in corsivo, poi rispondi normalmente: "${msg}"`,
+    };
+  }
+  process.stdout.write(JSON.stringify(out));
 }
 
 const avviato = process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]));
